@@ -1,8 +1,28 @@
 'use client';
 
-import { useState } from 'react';
 import { injected } from 'wagmi/connectors';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
+
+const Btn = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+  <button
+    {...props}
+    style={{
+      background:'#28E0AE', color:'#0D1521', border:'none',
+      padding:'10px 16px', borderRadius:8, cursor:'pointer'
+    }}
+  />
+);
+
+const BtnGhost = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+  <button
+    {...props}
+    style={{
+      background:'transparent', color:'#fff',
+      border:'1px solid #8CA3B5', padding:'8px 14px',
+      borderRadius:8, cursor:'pointer'
+    }}
+  />
+);
 
 export default function Home() {
   // Wallet
