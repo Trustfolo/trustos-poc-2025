@@ -1,210 +1,261 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// ↑一時しのぎ（最小範囲で）
-
-
 'use client';
 
-import { injected } from 'wagmi/connectors';
-import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { useEffect, useMemo, useState } from 'react';
 
-const Btn = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button
-    {...props}
-    style={{
-      background:'#28E0AE', color:'#0D1521', border:'none',
-      padding:'10px 16px', borderRadius:8, cursor:'pointer'
-    }}
-  />
-);
+type DaoResult = {
+  approved: boolean;
+  yes: number;
+  no: number;
+  quorum: number;
+  txHash?: string;
+};
 
-const BtnGhost = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button
-    {...props}
-    style={{
-      background:'transparent', color:'#fff',
-      border:'1px solid #8CA3B5', padding:'8px 14px',
-      borderRadius:8, cursor:'pointer'
-    }}
-  />
-);
+type LedgerEntry = {
+  kind: string;
+  ledgerId: string;
+  height: number;
+  prevHash: string | null;
+  address: string;
+  score: number;
+  daoResult: DaoResult;
+  createdAt: string;
+  hash: string;
+};
 
-export default function Home() {
-  // Wallet
-  const { connect } = useConnect({ connector: injected() });
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-
-  // States
+export default function Page() {
+  const [mounted, setMounted] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
   const [score, setScore] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string>('');
+  const [daoResult, setDaoResult] = useState<DaoResult | null>(null);
+  const [ledger, setLedger] = useState<LedgerEntry | null>(null);
+  const [timeline, setTimeline] = useState<LedgerEntry[]>([]);
+  const [verifyOk, setVerifyOk] = useState<boolean | null>(null);
 
-  const [daoLoading, setDaoLoading] = useState(false);
-  const [dao, setDao] = useState<null | {
-    approved: boolean;
-    txHash: string;
-    yes: number; no: number; quorum: number;
-  }>(null);
+  /* ------------------ hydration safety ------------------ */
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  // UI helpers
-  const Btn = (props: any) => (
-    <button
-      {...props}
-      style={{
-        background:'#28E0AE', color:'#0D1521', border:'none',
-        padding:'10px 16px', borderRadius:8, cursor:'pointer'
-      }}
-    />
-  );
-  const BtnGhost = (props: any) => (
-    <button
-      {...props}
-      style={{
-        background:'transparent', color:'#fff',
-        border:'1px solid #8CA3B5', padding:'8px 14px',
-        borderRadius:8, cursor:'pointer'
-      }}
-    />
-  );
-  const Tag = ({ok}:{ok:boolean}) => (
-    <span style={{
-      padding:'4px 8px', borderRadius:999,
-      background: ok ? '#28E0AE' : '#FF6B6B',
-      color: ok ? '#0D1521' : '#1B0B0B', fontWeight:700
-    }}>
-      {ok ? 'Verified' : 'Rejected'}
-    </span>
-  );
+  if (!mounted) return null;
 
-  // API: Score
-  const generateScore = async () => {
-    setLoading(true);
-    setMsg('Generating trust score…');
-    setDao(null); // 前回のDAO結果をリセット
+  /* ------------------ wallet ------------------ */
+  const connectWallet = async () => {
     try {
-      const res = await fetch('/api/score', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ address })
+      const eth = (window as any).ethereum;
+      if (!eth) {
+        alert('MetaMask not found');
+        return;
+      }
+      const accounts = await eth.request({
+        method: 'eth_requestAccounts',
       });
-      const data = await res.json();
-      setScore(data.score);
-      setMsg('Done.');
+      setAddress(accounts?.[0] ?? null);
     } catch (e) {
-      setMsg('Error generating score');
-    } finally {
-      setLoading(false);
+      console.error(e);
+      alert('Wallet connection failed');
     }
   };
 
-  // API: DAO Approve
-  const approveDao = async () => {
-    if (score == null) return alert('先にスコアを生成してください');
-    setDaoLoading(true);
-    setDao(null);
-    
-    try {
-  const res = await fetch('/api/score', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ address })
-  });
-  const data = await res.json();
-  setScore(data.score);
-  setMsg('Done.');
-} catch (err) {
-  console.error(err);
-  setMsg('Error generating score');
-} finally {
-  setLoading(false);
-}
+  const disconnect = () => {
+    setAddress(null);
+    setScore(null);
+    setDaoResult(null);
+    setLedger(null);
+    setVerifyOk(null);
+  };
 
-  // Render
+  /* ------------------ AI score ------------------ */
+  const generateScore = () => {
+    const s = 60 + Math.floor(Math.random() * 15);
+    setScore(s);
+  };
+
+  /* ------------------ DAO ------------------ */
+  const submitDao = () => {
+    if (score == null || !address) return;
+    const dao: DaoResult = {
+      approved: true,
+      yes: 70,
+      no: 30,
+      quorum: 60,
+      txHash: '0xMOCK',
+    };
+    setDaoResult(dao);
+
+    const entry: LedgerEntry = {
+      kind: 'trust_kernel_v1',
+      ledgerId: `ledger_${Date.now()}`,
+      height: timeline.length + 1,
+      prevHash: timeline.at(-1)?.hash ?? null,
+      address,
+      score,
+      daoResult: dao,
+      createdAt: new Date().toISOString(),
+      hash: `0x${Math.random().toString(16).slice(2)}`,
+    };
+
+    setLedger(entry);
+    setTimeline((t) => [entry, ...t]);
+  };
+
+  /* ------------------ verify ------------------ */
+  const verify = () => {
+    setVerifyOk(!!ledger);
+  };
+
+  /* ------------------ score ring ------------------ */
+  const ring = useMemo(() => {
+    if (score == null) return 0;
+    return Math.min(100, Math.max(0, score));
+  }, [score]);
+
   return (
-    <main
-      style={{
-        minHeight:'100vh', background:'#0D1521', color:'#fff',
-        display:'grid', placeItems:'center', fontFamily:'Inter, Noto Sans JP, sans-serif'
-      }}
-    >
-      <div style={{textAlign:'center', maxWidth:720, width:'100%', padding:16}}>
-        <h1 style={{marginBottom:16}}>TRUST OS PoC</h1>
+    <main className="relative min-h-screen overflow-hidden text-slate-100">
+      {/* background */}
+      <div className="absolute inset-0 bg-[#050A16]" />
+      <div className="absolute inset-0 opacity-95 bg-[radial-gradient(circle_at_18%_12%,rgba(34,211,238,0.16),transparent_42%),radial-gradient(circle_at_80%_28%,rgba(96,165,250,0.14),transparent_45%),radial-gradient(circle_at_60%_85%,rgba(167,139,250,0.10),transparent_55%)]" />
 
-        {!isConnected ? (
-          <>
-            <p style={{opacity:.8, marginBottom:12}}>
-              Connect your wallet / ウォレットを接続
-            </p>
-            <Btn onClick={() => connect()}>Connect Wallet</Btn>
-            <p style={{fontSize:12, opacity:.6, marginTop:10}}>
-              ※ MetaMaskは後からでもOK。未接続でもスコア生成は動作します。
-            </p>
-          </>
-        ) : (
-          <>
-            <p style={{margin:'12px 0'}}>Connected: {address?.slice(0,6)}…{address?.slice(-4)}</p>
-            <BtnGhost onClick={() => disconnect()}>Disconnect</BtnGhost>
-          </>
-        )}
+      <div className="relative mx-auto w-full max-w-[920px] px-6 py-14 [transform:scale(1.05)] origin-top">
+        {/* header */}
+        <h1 className="text-center text-[42px] font-semibold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-sky-200 to-violet-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.18)]">
+          TRUST OS PoC
+        </h1>
+        <p className="mt-2 text-center text-sm text-slate-400">
+          Wallet → AI Trust Score → DAO Approval → Ledger → Verify
+        </p>
 
-        {/* Score Block */}
-        <div style={{marginTop:24, padding:16, border:'1px solid #1E3247', borderRadius:12, background:'#0F1D2B'}}>
-          <h2 style={{marginTop:0}}>AI Analysis → Trust Score</h2>
-          <Btn onClick={generateScore} disabled={loading} style={{marginTop:8}}>
-            {loading ? 'Generating…' : 'Generate Trust Score'}
-          </Btn>
-          {msg && <p style={{opacity:.8, marginTop:8, marginBottom:0}}>{msg}</p>}
-          {score !== null && (
-            <div style={{marginTop:12, padding:'10px 12px', border:'1px solid #1E4153', borderRadius:12, background:'#0B2430'}}>
-              <strong>Trust Score:</strong> {score} / 100
+        {/* 1 wallet */}
+        <section className="mt-8 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">1. Connect Wallet</h2>
+          <div className="mt-3 flex gap-3">
+            <button
+              onClick={connectWallet}
+              className="rounded-lg bg-cyan-400 px-4 py-2 font-medium text-black"
+            >
+              Connect / MetaMask
+            </button>
+            <button
+              onClick={disconnect}
+              className="rounded-lg bg-white/10 px-4 py-2"
+            >
+              Disconnect
+            </button>
+          </div>
+          {address && (
+            <div className="mt-3 text-sm text-slate-300">
+              Connected: {address}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* DAO Approve Block */}
-        <div style={{marginTop:24, padding:16, border:'1px solid #1E3247', borderRadius:12, background:'#0F1D2B'}}>
-          <h2 style={{marginTop:0}}>DAO Approval (Mock)</h2>
-          <p style={{opacity:.8, margin:'6px 0'}}>
-            Community votes to verify your trust score / DAO投票でスコア承認
-          </p>
-
+        {/* 2 score */}
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">2. AI Trust Score</h2>
           <button
-            onClick={approveDao}
-            disabled={daoLoading || score==null}
-            style={{
-              background:'#8BD3FF', color:'#00203F', border:'none',
-              padding:'10px 16px', borderRadius:8, cursor:'pointer'
-            }}
+            onClick={generateScore}
+            className="mt-3 rounded-lg bg-sky-400 px-4 py-2 font-medium text-black"
           >
-            {daoLoading ? 'Voting… / 投票中…' : 'Submit to DAO / 承認申請'}
+            Generate Trust Score
           </button>
 
-          {dao && (
-            <div style={{marginTop:12, padding:'10px 12px', border:'1px solid #1E4153', borderRadius:12, background:'#0B2430', textAlign:'left'}}>
-              <div style={{display:'flex', gap:8, alignItems:'center', justifyContent:'space-between'}}>
-                <div>
-                  <div><strong>Result:</strong> <Tag ok={dao.approved} /></div>
-                  <div style={{marginTop:6, fontSize:13, opacity:.9}}>
-                    <div>Votes: YES {dao.yes} / NO {dao.no} (Quorum {dao.quorum})</div>
-                    <div style={{marginTop:2}}>Tx: <code style={{fontSize:12}}>{dao.txHash.slice(0,18)}…</code></div>
-                  </div>
-                </div>
-                <div style={{minWidth:160, textAlign:'center'}}>
-                  <div style={{height:10, background:'#133247', borderRadius:999, overflow:'hidden'}}>
-                    <div style={{
-                      width: `${Math.min(100, Math.round(dao.yes/(dao.yes+dao.no)*100))}%`,
-                      height:'100%', background:'#28E0AE'
-                    }}/>
-                  </div>
-                  <div style={{fontSize:12, opacity:.7, marginTop:4}}>
-                    Yes ratio
-                  </div>
-                </div>
-              </div>
+          {score != null && (
+            <div className="mt-6 flex items-center gap-6">
+              <svg width="120" height="120">
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="50"
+                  stroke="rgba(255,255,255,0.15)"
+                  strokeWidth="10"
+                  fill="none"
+                />
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="50"
+                  stroke="url(#grad)"
+                  strokeWidth="10"
+                  fill="none"
+                  strokeDasharray={`${ring * 3.14} 314`}
+                  transform="rotate(-90 60 60)"
+                />
+                <defs>
+                  <linearGradient id="grad">
+                    <stop offset="0%" stopColor="#22d3ee" />
+                    <stop offset="55%" stopColor="#60a5fa" />
+                    <stop offset="100%" stopColor="#a78bfa" />
+                  </linearGradient>
+                </defs>
+                <text
+                  x="60"
+                  y="68"
+                  textAnchor="middle"
+                  fontSize="26"
+                  fill="white"
+                >
+                  {score}
+                </text>
+              </svg>
+              <div className="text-lg">Trust Score</div>
             </div>
           )}
-        </div>
+        </section>
 
+        {/* 3 dao */}
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">3. DAO Approval (Mock)</h2>
+          <button
+            onClick={submitDao}
+            disabled={score == null}
+            className="mt-3 rounded-lg bg-emerald-400 px-4 py-2 font-medium text-black disabled:opacity-40"
+          >
+            Submit to DAO
+          </button>
+          {daoResult && (
+            <div className="mt-3 font-semibold text-emerald-300">
+              DAO Result: VERIFIED
+            </div>
+          )}
+        </section>
+
+        {/* 4 ledger */}
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">4. Trust Kernel Ledger</h2>
+          {ledger ? (
+            <pre className="mt-3 max-h-56 overflow-auto rounded bg-black/40 p-3 text-xs">
+              {JSON.stringify(ledger, null, 2)}
+            </pre>
+          ) : (
+            <p className="mt-2 text-sm text-slate-400">No ledger yet.</p>
+          )}
+        </section>
+
+        {/* 5 timeline */}
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">5. Ledger Timeline</h2>
+          <pre className="mt-3 max-h-56 overflow-auto rounded bg-black/40 p-3 text-xs">
+            {JSON.stringify(timeline, null, 2)}
+          </pre>
+        </section>
+
+        {/* 6 verify */}
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="font-semibold">6. Verify</h2>
+          <button
+            onClick={verify}
+            className="mt-3 rounded-lg bg-white/10 px-4 py-2"
+          >
+            Verify Ledger
+          </button>
+          {verifyOk === false && (
+            <p className="mt-2 text-yellow-400">
+              Verify (mock): pending full on-chain verification
+            </p>
+          )}
+          {verifyOk === true && (
+            <p className="mt-2 font-semibold text-emerald-300">Verify: OK</p>
+          )}
+        </section>
       </div>
     </main>
   );
