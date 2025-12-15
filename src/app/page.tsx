@@ -480,9 +480,13 @@ return;
 
 // 返却形式が揺れても吸収
 const obj = (json && typeof json === 'object') ? (json as JsonObject) : {};
-const dr = (obj.daoResult && typeof obj.daoResult === 'object')
-? (obj.daoResult as DaoSubmitResponse)
-: (obj as unknown as DaoSubmitResponse);
+
+// ✅ daoResult / dao / 直返し、どれでも拾う
+const dr =
+  (obj.daoResult && typeof obj.daoResult === 'object' ? (obj.daoResult as DaoSubmitResponse) : null) ??
+  (obj.dao && typeof obj.dao === 'object' ? (obj.dao as DaoSubmitResponse) : null) ??
+  (obj as unknown as DaoSubmitResponse);
+
 
 setDaoResult(dr);
 
