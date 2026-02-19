@@ -562,7 +562,7 @@ return clamp(score.score, 0, 100);
 
 const metaMaskTip = (
 <div className="mt-2 text-xs text-white/55">
-Tip: もし Disconnect → Connect で MetaMask のポップアップが出ない場合は、MetaMask で{' '}
+tip: もし Disconnect → Connect で MetaMask のポップアップが出ない場合は、MetaMask で{' '}
 <span className="text-white/80">「Connected sites」</span>からこのサイトを削除してから再度 Connect してください（拡張機能側の仕様）。
 </div>
 );
@@ -655,7 +655,6 @@ Status:{' '}
 <div className="text-white/70">
 Address: <span className="text-white/85">{address ?? '—'}</span>
 </div>
-{metaMaskTip}
 </div>
 </div>
 
